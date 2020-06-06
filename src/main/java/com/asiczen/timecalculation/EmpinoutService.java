@@ -1,8 +1,8 @@
 package com.asiczen.timecalculation;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -22,18 +22,30 @@ public class EmpinoutService {
 	@Autowired
 	EmpinoutRepository repo;
 
-	public void readRecordsfromDb() {
-		Long count = repo.findAll().stream().distinct().count();
+	public void readActiveRecords() {
 
-		log.info("Number of records read ---> {} ", count);
+		Optional<List<Empinout>> dataSet = repo.findByActive(true);
 
-		List<Empinout> empdata = repo.findAll().stream().distinct().collect(Collectors.toList());
+		if (dataSet.isPresent()) {
 
-		// Sort the data based on time stamp
+			// 1. Distinct employee id
+			List<String> empid = dataSet.get().stream().map(item -> item.getEmpId()).distinct()
+					.collect(Collectors.toList());
+			// 2. process each employee data
+			for (String item : empid) {
+				log.info("calculating data for -> {}", item);
+				calculateTime(dataSet.get().stream().filter(d -> d.getEmpId().equalsIgnoreCase(item)).distinct()
+						.collect(Collectors.toList()));
+			}
+		}
 
-		//List<Empinout> processedData = new ArrayList<>();
+	}
+
+	private void calculateTime(List<Empinout> empdata) {
 
 		Stack<Empinout> templocation = new Stack<>();
+
+		// Section filters the required data
 
 		empdata.forEach(item -> {
 			if (templocation.isEmpty()) {
@@ -56,20 +68,8 @@ public class EmpinoutService {
 			}
 		});
 
-		templocation.forEach(item -> {
-			log.info(item.toString());
-		});
-
-		// skips multiple out records. considers the last out time.
-		// skip multiple in records , considers the last in record
-
-//		log.info("printing processed data");
-//		processedData.forEach(item -> {
-//			log.info(item.toString());
-//		});
-
 		Long total = 0L;
-		
+
 		for (int i = 0; i + 1 < templocation.size(); i++) {
 
 			Duration duration = Duration.between(templocation.get(i).getTimeStamp(),
@@ -85,23 +85,66 @@ public class EmpinoutService {
 			}
 
 		}
-		
 
-//		for (int i = 0; i + 1 < processedData.size(); i++) {
-//
-//			Duration duration = Duration.between(processedData.get(i).getTimeStamp(),
-//					processedData.get(i + 1).getTimeStamp());
-//
-//			if (processedData.get(i).getType().equalsIgnoreCase("in")
-//					&& processedData.get(i + 1).getType().equalsIgnoreCase("out")) {
-//				total = total + duration.toMinutes();
-//			} else if (processedData.get(i).getType().equalsIgnoreCase("out")
-//					&& processedData.get(i + 1).getType().equalsIgnoreCase("in")) {
-//
-//			} else {
-//			}
-//
-//		}
+		log.info("Final Results --> {}", total);
+
+	}
+
+	public void readRecordsfromDb() {
+		Long count = repo.findAll().stream().distinct().count();
+
+		log.info("Number of records read ---> {} ", count);
+
+		List<Empinout> empdata = repo.findAll().stream().distinct().collect(Collectors.toList());
+
+		Stack<Empinout> templocation = new Stack<>();
+
+		// Section filters the required data
+
+		empdata.forEach(item -> {
+			if (templocation.isEmpty()) {
+				templocation.push(item);
+			} else if (item.getType().equalsIgnoreCase("out")) {
+				if (templocation.peek().getType().equalsIgnoreCase("out")) {
+					templocation.pop();
+					templocation.push(item);
+				} else {
+					templocation.push(item);
+				}
+			} else if (item.getType().equalsIgnoreCase("in")) {
+				if (templocation.peek().getType().equalsIgnoreCase("in")) {
+					templocation.pop();
+					templocation.push(item);
+				} else {
+					templocation.push(item);
+				}
+
+			}
+		});
+
+		// templocation.forEach(item -> {
+		// log.info(item.toString());
+		// });
+
+		// Section calculates actual working hours
+
+		Long total = 0L;
+
+		for (int i = 0; i + 1 < templocation.size(); i++) {
+
+			Duration duration = Duration.between(templocation.get(i).getTimeStamp(),
+					templocation.get(i + 1).getTimeStamp());
+
+			if (templocation.get(i).getType().equalsIgnoreCase("in")
+					&& templocation.get(i + 1).getType().equalsIgnoreCase("out")) {
+				total = total + duration.toMinutes();
+			} else if (templocation.get(i).getType().equalsIgnoreCase("out")
+					&& templocation.get(i + 1).getType().equalsIgnoreCase("in")) {
+
+			} else {
+			}
+
+		}
 
 		log.info("Final Results --> {}", total);
 	}
