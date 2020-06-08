@@ -1,7 +1,15 @@
 package com.asiczen.timecalculation;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.TextStyle;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Stack;
 import java.util.stream.Collectors;
@@ -11,7 +19,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.asiczen.timecalculation.model.DeviceWorkingHours;
 import com.asiczen.timecalculation.model.Empinout;
+import com.asiczen.timecalculation.repository.DeviceWorkingHoursRepository;
 import com.asiczen.timecalculation.repository.EmpinoutRepository;
 
 @Service
@@ -22,21 +32,47 @@ public class EmpinoutService {
 	@Autowired
 	EmpinoutRepository repo;
 
+	@Autowired
+	DeviceWorkingHoursRepository hoursRepo;
+
 	public void readActiveRecords() {
 
+		// Step 1 : Read unprocessed records
 		Optional<List<Empinout>> dataSet = repo.findByActive(true);
 
-		if (dataSet.isPresent()) {
+		List<LocalDate> dateList = new ArrayList<>();
 
-			// 1. Distinct employee id
-			List<String> empid = dataSet.get().stream().map(item -> item.getEmpId()).distinct()
+		// 2 . Process date wise data
+		if (dataSet.isPresent()) {
+			dateList = dataSet.get().stream().map(item -> covertLocaltimetoDate(item.getTimeStamp())).distinct()
 					.collect(Collectors.toList());
-			// 2. process each employee data
-			for (String item : empid) {
-				log.info("calculating data for -> {}", item);
-				calculateTime(dataSet.get().stream().filter(d -> d.getEmpId().equalsIgnoreCase(item)).distinct()
-						.collect(Collectors.toList()));
-			}
+		}
+
+		for (LocalDate date : dateList) {
+
+			log.info("Calculation begins for {} ", date.toString());
+
+			processEmpWiseData(dataSet.get().stream().filter(
+					item -> covertLocaltimetoDate(item.getTimeStamp()).toString().equalsIgnoreCase(date.toString()))
+					.collect(Collectors.toList()));
+
+			log.info("calculation ends for {}", date.toString());
+		}
+
+	}
+
+	private void processEmpWiseData(List<Empinout> empData) {
+
+		// Distinct employees in dataset
+
+		List<String> empids = empData.stream().map(e -> e.getEmpId()).distinct().collect(Collectors.toList());
+
+		for (String empid : empids) {
+
+			log.info("Caculating time for {} ", empid);
+
+			calculateTime(empData.stream().filter(item -> item.getEmpId().equalsIgnoreCase(empid))
+					.collect(Collectors.toList()));
 		}
 
 	}
@@ -84,6 +120,26 @@ public class EmpinoutService {
 			} else {
 			}
 
+		}
+
+		if (!empdata.isEmpty()) {
+			String empid = empdata.get(0).getEmpId();
+			String orgid = empdata.get(0).getOrgId();
+			int calculatedhours = total.intValue();
+			Date date = Date.from(covertLocaltimetoDate(empdata.get(0).getTimeStamp()).atStartOfDay().atZone(ZoneId.systemDefault()).toInstant()); 
+			String month = empdata.get(0).getTimeStamp().getMonth().getDisplayName(TextStyle.SHORT, Locale.US).toUpperCase();
+			String year = Integer.toString(empdata.get(0).getTimeStamp().getYear());
+
+			DeviceWorkingHours devicehours = new DeviceWorkingHours();
+
+			devicehours.setEmpId(empid);
+			devicehours.setOrgId(orgid);
+			devicehours.setCalculatedhours(calculatedhours);
+			devicehours.setDate(date);
+			devicehours.setMonth(month);
+			devicehours.setYear(year);
+
+			hoursRepo.save(devicehours);
 		}
 
 		log.info("Final Results --> {}", total);
@@ -147,6 +203,33 @@ public class EmpinoutService {
 		}
 
 		log.info("Final Results --> {}", total);
+	}
+
+	// Method to covert java local date time to date
+
+	public LocalDate covertLocaltimetoDate(LocalDateTime locadateTime) {
+
+		int year = locadateTime.getYear();
+		int month = locadateTime.getMonthValue();
+		int day = locadateTime.getDayOfMonth();
+
+		String dayStr = null;
+		String monthStr = null;
+
+		if (day >= 1 && day <= 9) {
+			dayStr = "0" + Integer.toString(day);
+		} else {
+			dayStr = Integer.toString(day);
+		}
+
+		if (month >= 1 && month <= 9) {
+			monthStr = "0" + Integer.toString(month);
+		}
+
+		String strDate = Integer.toString(year) + "-" + monthStr + "-" + dayStr;
+
+		return LocalDate.parse(strDate);
+
 	}
 
 }
