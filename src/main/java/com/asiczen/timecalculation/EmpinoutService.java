@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Stack;
 import java.util.stream.Collectors;
@@ -59,6 +58,18 @@ public class EmpinoutService {
 			log.info("calculation ends for {}", date.toString());
 		}
 
+		dataSet.ifPresent(item -> {
+			updateRecordStatus(item);
+		});
+
+	}
+
+	public void updateRecordStatus(List<Empinout> records) {
+
+		records.forEach(record -> {
+			record.setActive(false);
+			repo.save(record);
+		});
 	}
 
 	private void processEmpWiseData(List<Empinout> empData) {
@@ -126,8 +137,10 @@ public class EmpinoutService {
 			String empid = empdata.get(0).getEmpId();
 			String orgid = empdata.get(0).getOrgId();
 			int calculatedhours = total.intValue();
-			Date date = Date.from(covertLocaltimetoDate(empdata.get(0).getTimeStamp()).atStartOfDay().atZone(ZoneId.systemDefault()).toInstant()); 
-			String month = empdata.get(0).getTimeStamp().getMonth().getDisplayName(TextStyle.SHORT, Locale.US).toUpperCase();
+			Date date = Date.from(covertLocaltimetoDate(empdata.get(0).getTimeStamp()).atStartOfDay()
+					.atZone(ZoneId.systemDefault()).toInstant());
+			String month = empdata.get(0).getTimeStamp().getMonth().getDisplayName(TextStyle.SHORT, Locale.US)
+					.toUpperCase();
 			String year = Integer.toString(empdata.get(0).getTimeStamp().getYear());
 
 			DeviceWorkingHours devicehours = new DeviceWorkingHours();
